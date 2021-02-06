@@ -1,0 +1,149 @@
+Motivation
+Chatbots, virtual assistant, and dialog agents will typically classify queries into specific intents in order to generate the most coherent response. Intent classification is a classification problem that predicts the intent label for any given user query. It is usually a multi-class classification problem, where the query is assigned one unique label. For example, the query “how much does the limousine service cost within pittsburgh” is labeled as “groundfare” while the query “what kind of ground transportation is available in denver” is labeled as “ground_service”. The query “i want to fly from boston at 838 am and arrive in Denver at 1110 in the morning” is a “flight” intent, while “ show me the costs and times for flights from san francisco to atlanta” is an “airfare+flight_time” intent.
+BERT NLP — How To Build a Question Answering Bot
+Understanding the intuition with hands-on PyTorch code for BERT fine-tuned on SQuAD.
+towardsdatascience.com
+The examples above show how ambiguous intent labeling can be. Users might add misleading words, causing multiple intents to be present in the same query. Attention-based learning methods were proposed for intent classification (Liu and Lane, 2016; Goo et al., 2018). One type of network built with attention is called a Transformer. It applies attention mechanisms to gather information about the relevant context of a given word, and then encode that context in a rich vector that smartly represents the word.
+In this article, we will demonstrate Transformer, especially how its attention mechanism helps in solving the intent classification task by learning contextual relationships. After demonstrating the limitation of a LSTM-based classifier, we introduce BERT: Pre-training of Deep Bidirectional Transformers, a novel Transformer-approach, pre-trained on large corpora and open-sourced. The last part of this article presents the Python code necessary for fine-tuning BERT for the task of Intent Classification and achieving state-of-art accuracy on unseen intent queries. We use the ATIS (Airline Travel Information System) dataset, a standard benchmark dataset widely used for recognizing the intent behind a customer query.
+Intent classification with LSTM
+Data
+In one of our previous article, you will find the Python code for loading the ATIS dataset. In the ATIS training dataset, we have 26 distinct intents, whose distribution is shown below. The dataset is highly unbalanced, with most queries labeled as “flight” (code 14).
+
+Image for post
+Multi-class classifier
+Before looking at Transformer, we implement a simple LSTM recurrent network for solving the classification task. After the usual preprocessing, tokenization and vectorization, the 4978 samples are fed into a Keras Embedding layer, which projects each word as a Word2vec embedding of dimension 256. The results are passed through a LSTM layer with 1024 cells. This produces 1024 outputs which are given to a Dense layer with 26 nodes and softmax activation. The probabilities created at the end of this pipeline are compared to the original labels using categorical crossentropy.
+
+Image for post
+As we can see in the training output above, the Adam optimizer gets stuck, the loss and accuracy do not improve. The model appears to predict the majority class “flight” at each step.
+When we use the trained model to predict the intents on the unseen test dataset, the confusion matrix clearly shows how the model overfits to the majority “flight” class.
+
+Image for post
+Data augmentation
+Dealing with an imbalanced dataset is a common challenge when solving a classification task. Data augmentation is one thing that comes to mind as a good workaround. Here, it is not rare to encounter the SMOTE algorithm, as a popular choice for augmenting the dataset without biasing predictions. SMOTE uses a k-Nearest Neighbors classifier to create synthetic datapoints as a multi-dimensional interpolation of closely related groups of true data points. Unfortunately, we have 25 minority classes in the ATIS training dataset, leaving us with a single overly representative class. SMOTE fails to work as it cannot find enough neighbors (minimum is 2). Oversampling with replacement is an alternative to SMOTE, which also does not improve the model’s predictive performance either.
+The SNIPS dataset, which is collected from the Snips personal voice assistant, a more recent dataset for natural language understanding, is a dataset which could be used to augment the ATIS dataset in a future effort.
+Binary classifier
+Since we were not quite successful at augmenting the dataset, now, we will rather reduce the scope of the problem. We define a binary classification task where the “flight” queries are evaluated against the remaining classes, by collapsing them into a single class called “other”. The distribution of labels in this new dataset is given below.
+
+Image for post
+We can now use a similar network architecture as previously. The only change is to reduce the number of nodes in the Dense layer to 1, activation function to sigmoid and the loss function to binary crossentropy. Surprisingly, the LSTM model is still not able to learn to predict the intent, given the user query, as we see below.
+
+Image for post
+After 10 epochs, we evaluate the model on an unseen test dataset. This time, we have all samples being predicted as “other”, although “flight” had more than twice as many samples as “other” in the training set.
+
+Image for post
+Intent Classification with BERT
+The motivation why we are now looking at Transformer is the poor classification result we witnessed with sequence-to-sequence models on the Intent Classification task when the dataset is imbalanced. In this section, we introduce a variant of Transformer and implement it for solving our classification problem. We will look especially at the late 2018 published Bidirectional Encoder Representations from Transformers (BERT).
+What is BERT?
+BERT is basically a trained Transformer Encoder stack, with twelve in the Base version, and twenty-four in the Large version, compared to 6 encoder layers in the original Transformer we described in the previous article.
+Lost in Translation. Found by Transformer.
+Tackle the mystery of Transformer model used by GPT-2, BERT
+towardsdatascience.com
+BERT encoders have larger feedforward networks (768 and 1024 nodes in Base and Large respectively) and more attention heads (12 and 16 respectively). BERT was trained on Wikipedia and Book Corpus, a dataset containing +10,000 books of different genres. Below you can see a diagram of additional variants of BERT pre-trained on specialized corpora.
+Image for post
+source
+BERT was released to the public, as a new era in NLP. Its open-sourced model code broke several records for difficult language-based tasks. The pre-trained model on massive datasets enables anyone building natural language processing to use this free powerhouse. BERT theoretically allows us to smash multiple benchmarks with minimal task-specific fine-tuning.
+Image for post
+(source: Jay. Alammar, 2018)
+BERT works similarly to the Transformer encoder stack, by taking a sequence of words as input which keep flowing up the stack from one encoder to the next, while new sequences are coming in. The final output for each sequence is a vector of 728 numbers in Base or 1024 in Large version. We will use such vectors for our intent classification problem.
+Why do we need BERT?
+Proper language representation is key for general-purpose language understanding by machines. Context-free models such as word2vec or GloVe generate a single word embedding representation for each word in the vocabulary. For example, the word “bank” would have the same representation in “bank deposit” and in “riverbank”. Contextual models instead generate a representation of each word that is based on the other words in the sentence. BERT, as a contextual model, captures these relationships in a bidirectional way. BERT was built upon recent work and clever ideas in pre-training contextual representations including Semi-supervised Sequence Learning, Generative Pre-Training, ELMo, the OpenAI Transformer, ULMFit and the Transformer. Although these models are all unidirectional or shallowly bidirectional, BERT is fully bidirectional.
+We will use BERT to extract high-quality language features from the ATIS query text data, and fine-tune BERT on a specific task (classification) with own data to produce state of the art predictions.
+Preparing BERT environment
+Feel free to download the original Jupyter Notebook, which we will adapt for our goal in this section.
+As for development environment, we recommend Google Colab with its offer of free GPUs and TPUs, which can be added by going to the menu and selecting: Edit -> Notebook Settings -> Add accelerator (GPU). An alternative to Colab is to use a JupyterLab Notebook Instance on Google Cloud Platform, by selecting the menu AI Platform -> Notebooks -> New Instance -> Pytorch 1.1 -> With 1 NVIDIA Tesla K80 after requesting Google to increase your GPU quota. This will cost ca. $0.40 per hour (current pricing, which might change). Below you find the code for verifying your GPU availability.
+
+We will use the PyTorch interface for BERT by Hugging Face, which at the moment, is the most widely accepted and most powerful PyTorch interface for getting on rails with BERT. Hugging Face provides pytorch-transformers repository with additional libraries for interfacing more pre-trained models for natural language processing: GPT, GPT-2, Transformer-XL, XLNet, XLM.
+As you can see below, in order for torch to use the GPU, you have to identify and specify the GPU as the device, because later in the training loop, we load data onto that device.
+
+Now we can upload our dataset to the notebook instance. Please run the code from our previous article to preprocess the dataset using the Python function load_atis() before moving on.
+BERT expects input data in a specific format, with special tokens to mark the beginning ([CLS]) and separation/end of sentences ([SEP]). Furthermore, we need to tokenize our text into tokens that correspond to BERT’s vocabulary.
+
+'[CLS]  i want to fly from boston at 838 am and arrive in denver at 1110 in the morning  [SEP]'
+['[CLS]', 'i', 'want', 'to', 'fly', 'from', 'boston', 'at', '83', '##8', 'am', 'and', 'arrive', 'in', 'denver', 'at', '111', '##0', 'in', 'the', 'morning', '[SEP]']
+For each tokenized sentence, BERT requires input ids, a sequence of integers identifying each input token to its index number in the BERT tokenizer vocabulary.
+
+BERT’s clever language modeling task masks 15% of words in the input and asks the model to predict the missing word. To make BERT better at handling relationships between multiple sentences, the pre-training process also included an additional task: given two sentences (A and B), is B likely to be the sentence that follows A? Therefore we need to tell BERT what task we are solving by using the concept of attention mask and segment mask. In our case, all words in a query will be predicted and we do not have multiple sentences per query. We define the mask below.
+
+Now it is time to create all tensors and iterators needed during fine-tuning of BERT using our data.
+
+Finally, it is time to fine-tune the BERT model so that it outputs the intent class given a user query string. For this purpose, we use the BertForSequenceClassification, which is the normal BERT model with an added single linear layer on top for classification. Below we display a summary of the model. The encoder summary is shown only once. The same summary would normally be repeated 12 times. We display only 1 of them for simplicity sake. We can see the BertEmbedding layer at the beginning, followed by a Transformer architecture for each encoder layer: BertAttention, BertIntermediate, BertOutput. At the end, we have the Classifier layer.
+
+As we feed input data, the entire pre-trained BERT model and the additional untrained classification layer is trained on our specific task. Training the classifier is relatively inexpensive. The bottom layers have already great English words representation, and we only really need to train the top layer, with a bit of tweaking going on in the lower levels to accommodate our task. This is a variant of transfer learning.
+
+Image for post
+BERT fine-tuned on the Intent Classification task for Natural Language Understanding
+The training loss plot from the variable train_loss_set looks awesome. The whole training loop took less than 10 minutes.
+Image for post
+Now, it is the moment of truth. Is BERT overfitting? Or is it doing better than our previous LSTM network? We now load the test dataset and prepare inputs just as we did with the training set. We then create tensors and run the model on the dataset in evaluation mode.
+
+Image for post
+With BERT we are able to get a good score (95.93%) on the intent classification task. This demonstrates that with a pre-trained BERT model it is possible to quickly and effectively create a high-quality model with minimal effort and training time using the PyTorch interface.
+Conclusion
+In this article, I demonstrated how to load the pre-trained BERT model in a PyTorch notebook and fine-tune it on your own dataset for solving a specific task. Attention matters when dealing with natural language understanding tasks. When combined with powerful words embedding from Transformer, an intent classifier can significantly improve its performance, as we successfully exposed.
+My new article provides hands-on proven PyTorch code for question answering with BERT fine-tuned on the SQuAD dataset.
+BERT NLP — How To Build a Question Answering Bot
+Understanding the intuition with hands-on PyTorch code for BERT fine-tuned on SQuAD.
+towardsdatascience.com
+This area opens a wide door for future work, especially because natural language understanding is at the core of several technologies including conversational AI (chatbots, personal assistants) and upcoming augmented analytics which was ranked by Gartner as a top disruptive challenge that organizations will face very soon. Understanding natural language has an impact on traditional analytical and business intelligence since executives are rapidly adopting smart information retrieval by text queries and data narratives instead of dashboards with complex charts.
+Thank you for reading more from me.
+Representing text in natural language processing
+Understanding the written words: gentle review of Word2vec, GloVe, TF-IDF, Bag-of-words, N-grams, 1-hot encoding…
+towardsdatascience.com
+Generative Adversarial Network (GAN) for Dummies — A Step By Step Tutorial
+The ultimate beginner guide for understanding, building and training GANs with bulletproof Python code.
+towardsdatascience.com
+The Ultimate Beginner Guide to TensorFlow
+How to implement linear regression and gradient descent from scratch! Understand the basics with TensorFlow once for…
+towardsdatascience.com
+Uncertainty in Deep Learning. How To Measure?
+A hands-on tutorial on Bayesian estimation of epistemic and aleatoric uncertainty with Keras. Towards a social…
+towardsdatascience.com
+WRITTEN BY
+
+Michel Kana, Ph.D
+Fellow Top Medium Writer. Fellow of Harvard University. Certified Learner. I help curious minds become AI practitioner.
+Follow
+1.3K
+
+20
+Sign up for The Daily Pick
+By Towards Data Science
+Hands-on real-world examples, research, tutorials, and cutting-edge techniques delivered Monday to Thursday. Make learning your daily ritual. Take a look
+
+Your email
+Get this newsletter
+By signing up, you will create a Medium account if you don’t already have one. Review our Privacy Policy for more information about our privacy practices.
+1.3K 
+
+20
+
+Machine Learning
+Data Science
+Artificial Intelligence
+Bert
+Towards Data Science
+More from Towards Data Science
+Follow
+A Medium publication sharing concepts, ideas, and codes.
+Robert (Munro) Monarch
+·Sep 14, 2019
+Diversity Sampling Cheatsheet
+When you are building a Supervised Machine Learning model, you want to make sure that it covers as diverse a set of data and real-world demographics as possible. The methods for ensuring that you have diverse training data for your model are a type of Active Learning called Diversity Sampling.
+The four types of Diversity Sampling covered in the cheatsheet are:
+Model-based Outliers: sampling for low activation in your logits and hidden layers to find items that are confusing to your model because of lack of information
+Cluster-based Sampling: using Unsupervised Machine Learning to sample data from all the meaningful trends in your data’s…
+Read more · 4 min read
+66
+
+1
+
+Joseph H
+·Sep 14, 2019
+The Basics of Indexing and Slicing Python Lists
+A guide for beginners, by a beginner
+Image for post
+Photo by Igor Miske on Unsplash
+I was preparing to demonstrate indexing and slicing lists to a group of fellow Python beginners a few days ago, and I got stuck on what seemed like a couple of pretty basic use cases. So after poking around a bit to get un-stuck, I figured it was worth sharing what I learned.
+Accessing the items in a list (and in other iterables like tuples and strings) is a fundamental skill for Python coders, and many Python tools follow similar conventions for indexing and slicing (e.g. numpy Arraysand pandas DataFrames). So it’s worth being familiar with the ins and outs.
+Definitions and Stage-Setting
+“Indexing” means referring to an element of an iterable by its position within the iterable. …
